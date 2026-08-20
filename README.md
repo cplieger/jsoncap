@@ -1,6 +1,6 @@
 # jsoncap
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/cplieger/jsoncap.svg)](https://pkg.go.dev/github.com/cplieger/jsoncap)
+[![Go Reference](https://pkg.go.dev/badge/github.com/cplieger/jsoncap/v2.svg)](https://pkg.go.dev/github.com/cplieger/jsoncap/v2)
 [![Go version](https://img.shields.io/github/go-mod/go-version/cplieger/jsoncap)](https://github.com/cplieger/jsoncap/blob/main/go.mod)
 [![Test coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cplieger/jsoncap/badges/coverage.json)](https://github.com/cplieger/jsoncap/actions/workflows/coverage.yml)
 [![Mutation](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cplieger/jsoncap/badges/mutation.json)](https://github.com/cplieger/jsoncap/issues?q=label%3Agremlins-tracker)
@@ -11,9 +11,9 @@
 
 A standalone, stdlib-only Go library for programs that decode JSON they did not write: a third-party API response, an upstream service's reply, a cached document from somewhere else.
 
-A byte cap on the response body is not a bound on decoding. `json.Unmarshal` materializes the entire decoded value before any caller-side count check can run, so compact serialized elements amplify a wire-capped body into decoded structs and slice backing arrays far past its own size. Measured on Go 1.27.0 by `BenchmarkHostileArray`: 300,011 bytes of `{"parts":[{},{},…]}` — 100,000 empty objects, the shape a byte cap waves straight through — expands into **12,974,836 bytes** of decoded structs and slice backing array, 43x the wire it arrived on.
+A byte cap on the response body is not a bound on decoding. `json.Unmarshal` materializes the entire decoded value before any caller-side count check can run, so compact serialized elements amplify a wire-capped body into decoded structs and slice backing arrays far past its own size. Measured on Go 1.27.0 by `BenchmarkHostileArray`: 300,011 bytes of `{"parts":[{},{},…]}` (100,000 empty objects, the shape a byte cap waves straight through) expands into **12,974,836 bytes** of decoded structs and slice backing array, 43x the wire it arrived on.
 
-`jsoncap` closes that gap by moving the count check in front of the allocation. A `Decoder` walks the token stream and lets the caller enforce every cardinality cap _before_ an element is decoded, so a hostile element count is refused rather than absorbed. On that same body a walk capped at 16 elements allocates **1,823 bytes** and refuses it — 7,117x less, and 965x faster. Its cost is flat: the same 21 allocations whether the body claims a thousand elements or a million.
+`jsoncap` closes that gap by moving the count check in front of the allocation. A `Decoder` walks the token stream and lets the caller enforce every cardinality cap _before_ an element is decoded, so a hostile element count is refused rather than absorbed. On that same body a walk capped at 16 elements allocates **1,823 bytes** and refuses it: 7,117x less, and 965x faster. Its cost is flat: the same 21 allocations whether the body claims a thousand elements or a million.
 
 The building blocks reproduce `encoding/json`'s observable semantics exactly, so a schema decoder built from them is a drop-in for `json.Unmarshal` on well-formed input.
 
@@ -42,7 +42,7 @@ if err := dec.End(); err != nil {
 `Array` decodes one array under both bounds, refusing the element that would cross either, so the slice never grows past what the caller allowed:
 
 ```go
-dec := jsoncap.NewDecoder(bytes.NewReader(data), 0)
+dec := jsoncap.NewDecoder(bytes.NewReader(data), 10_000)
 records, err := dec.Array(nil, maxEnvelopeErrors, "errors",
 	func(e *gqlError) error { return dec.Decode(e) })
 ```
@@ -82,7 +82,7 @@ if err := jsoncap.Preflight(bytes.NewReader(body)); err != nil {
 }
 ```
 
-`Preflight` and the `Decoder` deliberately disagree on duplicate keys, and that is the design. `Object` and `Array` reproduce `Unmarshal`'s merge semantics because a schema decoder must match the stdlib. `Preflight` fails closed because a caller that cannot tolerate the ambiguity should reject the body outright.
+`Preflight` and the `Decoder` deliberately disagree on duplicate keys, and that is the design. `Object` and `Array` reproduce `Unmarshal`'s merge semantics because a schema decoder must match the stdlib. `Preflight` fails closed because a caller that cannot tolerate the ambiguity rejects the body outright.
 
 ## API
 
@@ -91,7 +91,7 @@ if err := jsoncap.Preflight(bytes.NewReader(body)); err != nil {
 - `(*Decoder).Map[V](prior, maxEntries, what, decodeValue) (map[string]V, error)`: the same for a JSON object decoded into a Go map, charged against the same budget. Map semantics follow `Unmarshal`'s, where a duplicate key replaces with a fresh zero value rather than merging field-wise.
 - `Decoder.Object(field func(key string) error) error`: walks an object, dispatching each key to the caller. Match keys with `strings.EqualFold` to reproduce `Unmarshal`'s case-insensitive field fallback.
 - `Decoder.Decode(v any) error`: decodes one scalar or value through `json.Decoder.Decode`, for stdlib-identical type handling.
-- `Decoder.Skip() error`: token-skips an unknown field without materializing it. No Go value is built, but it is not free: `json.Decoder.Token` returns each token as an `any`, so the cost is proportional to the skipped value's token count — measured 5.02 allocations per skipped two-field object element by `BenchmarkSkip`.
+- `Decoder.Skip() error`: token-skips an unknown field without materializing it. No Go value is built, but it is not free: `json.Decoder.Token` returns each token as an `any`, so the cost is proportional to the skipped value's token count; measured 5.02 allocations per skipped two-field object element by `BenchmarkSkip`.
 - `Decoder.Open(delim json.Delim) (ok bool, err error)`, `More() bool`, `Key() (string, error)`, `Close() error`, `End() error`, `Elements() int`: the lower-level walk, for a caller assembling a shape the helpers do not cover. `json.Delim` is an integer type, so `Open('[')` takes an untyped rune constant and a caller needs no `encoding/json` import of its own.
 - `Preflight(r io.Reader) error`: one structural pass rejecting a repeated object key. Run it over the whole body, then decode.
 - `MaxDepth`: the nesting ceiling every walk here observes, which `encoding/json` provides and enforces.
@@ -101,10 +101,9 @@ if err := jsoncap.Preflight(bytes.NewReader(body)); err != nil {
 
 - **The check goes in front of the allocation, which is the whole point.** A cap applied after `json.Unmarshal` returns has already paid for the decode it was meant to prevent. Every bound here is tested before the element it governs costs anything.
 - **Two caps, because they answer different questions.** A per-container cap is a schema statement ("at most 500 items"). The aggregate budget is a document statement, and it is what stops a body that spreads a hostile total across many small, individually-legal containers.
-- **Stdlib parity is a contract, not an aspiration.** Null handling, empty containers, duplicate-key merge, case-insensitive field fallback, and unknown-field skipping all reproduce `encoding/json`'s observable behavior, verified by a fuzz target that compares every accepted value against `json.Unmarshal`. A guard that quietly decodes differently from the stdlib is a correctness bug wearing a security feature's clothes.
+- **Stdlib parity is a contract.** Null handling, empty containers, duplicate-key merge, case-insensitive field fallback, and unknown-field skipping all reproduce `encoding/json`'s observable behavior, verified by a fuzz target that compares every accepted value against `json.Unmarshal`.
 - **The walk is never looser than the stdlib.** The fuzz parity target asserts the direction explicitly: anything `json.Unmarshal` rejects, this rejects too.
-- **`Preflight` fails closed where the `Decoder` merges.** Not an inconsistency: the two serve callers with different tolerances, and the doc comment on each says which.
-- **Skipping runs with `UseNumber`.** Skipping an unknown field never converts its numbers through `float64`, which would reject syntactically valid values like `1e1000` that `Unmarshal`'s own field skipping accepts.
+- **The decoder always runs with `UseNumber`.** Skipping an unknown field never converts its numbers through `float64`, which would reject syntactically valid values like `1e1000` that `Unmarshal`'s own field skipping accepts. A caller that decodes into an untyped `any` receives `json.Number`.
 - **Errors carry a bound and a name, never document bytes.** The wrapping error names the container through the `what` argument. `ErrDuplicateKey` carries a bounded, quoted snippet of the offending key, and nothing else from the body: an unbounded excerpt on its way to a log line is the amplification this library exists to stop, reintroduced through its own diagnostics.
 - **Nesting needs no pass of its own.** `encoding/json` bounds depth at `MaxDepth` for every walk here, `Preflight` included. Since Go 1.27 that comes from `encoding/json/v2`'s `jsontext` decoder, which refuses to read the token opening container `MaxDepth+1`.
 
