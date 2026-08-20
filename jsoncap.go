@@ -241,7 +241,7 @@ func (d *Decoder) End() error {
 // yields an empty non-nil slice, matching Unmarshal's empty-array
 // allocation. Pass maxElems <= 0 for no per-array cap (the aggregate budget
 // still applies).
-func Array[T any](d *Decoder, prior []T, maxElems int, what string, decodeElem func(*T) error) ([]T, error) {
+func (d *Decoder) Array[T any](prior []T, maxElems int, what string, decodeElem func(*T) error) ([]T, error) {
 	ok, err := d.Open('[')
 	if err != nil || !ok {
 		return nil, err
@@ -342,7 +342,7 @@ func truncateArray[T any](s []T, n int) []T {
 // On error the returned map holds the entries decoded so far, exactly as a
 // failed json.Unmarshal leaves them in the caller's map; the error, not the
 // map, is the result.
-func Map[V any](d *Decoder, prior map[string]V, maxEntries int, what string, decodeValue func(key string, v *V) error) (map[string]V, error) {
+func (d *Decoder) Map[V any](prior map[string]V, maxEntries int, what string, decodeValue func(key string, v *V) error) (map[string]V, error) {
 	ok, err := d.Open('{')
 	if err != nil {
 		// Nothing was consumed into the map, so the caller's own value stands

@@ -1,4 +1,4 @@
-module github.com/cplieger/jsoncap
+module github.com/cplieger/jsoncap/v2
 
 go 1.27.0
 

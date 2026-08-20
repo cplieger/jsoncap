@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cplieger/jsoncap"
+	"github.com/cplieger/jsoncap/v2"
 )
 
 // widget / part form the small schema the parity tests decode both ways: a
@@ -42,25 +42,25 @@ func decodeWidget(d *jsoncap.Decoder, w *widget, tagCap, partCap int) error {
 			return d.Decode(&w.Count)
 		case strings.EqualFold(k, "tags"):
 			var err error
-			w.Tags, err = jsoncap.Array(d, w.Tags, tagCap, "tags", func(s *string) error { return d.Decode(s) })
+			w.Tags, err = d.Array(w.Tags, tagCap, "tags", func(s *string) error { return d.Decode(s) })
 			return err
 		case strings.EqualFold(k, "parts"):
 			var err error
-			w.Parts, err = jsoncap.Array(d, w.Parts, partCap, "parts", func(p *part) error { return decodePart(d, p) })
+			w.Parts, err = d.Array(w.Parts, partCap, "parts", func(p *part) error { return decodePart(d, p) })
 			return err
 		case strings.EqualFold(k, "meta"):
 			var err error
-			w.Meta, err = jsoncap.Map(d, w.Meta, tagCap, "meta", func(_ string, v *string) error { return d.Decode(v) })
+			w.Meta, err = d.Map(w.Meta, tagCap, "meta", func(_ string, v *string) error { return d.Decode(v) })
 			return err
 		case strings.EqualFold(k, "specs"):
 			var err error
-			w.Specs, err = jsoncap.Map(d, w.Specs, partCap, "specs", func(_ string, v *part) error { return decodePart(d, v) })
+			w.Specs, err = d.Map(w.Specs, partCap, "specs", func(_ string, v *part) error { return decodePart(d, v) })
 			return err
 		case strings.EqualFold(k, "nested"):
 			var err error
-			w.Nested, err = jsoncap.Map(d, w.Nested, tagCap, "nested", func(key string, v *map[string]string) error {
+			w.Nested, err = d.Map(w.Nested, tagCap, "nested", func(key string, v *map[string]string) error {
 				var inner error
-				*v, inner = jsoncap.Map(d, *v, tagCap, "nested."+key, func(_ string, s *string) error { return d.Decode(s) })
+				*v, inner = d.Map(*v, tagCap, "nested."+key, func(_ string, s *string) error { return d.Decode(s) })
 				return inner
 			})
 			return err
@@ -626,7 +626,7 @@ func TestMapCapCheckedBeforeBudgetAndKey(t *testing.T) {
 	// With no cap, the budget stops the walk BEFORE the over-budget entry's
 	// key is read, so the map holds exactly the charged entries.
 	d := jsoncap.NewDecoder(strings.NewReader(`{"a":"1","b":"2","c":"3"}`), 2)
-	m, err := jsoncap.Map(d, nil, 0, "meta", func(_ string, v *string) error { return d.Decode(v) })
+	m, err := d.Map(nil, 0, "meta", func(_ string, v *string) error { return d.Decode(v) })
 	if !errors.Is(err, jsoncap.ErrElementBudget) {
 		t.Fatalf("err = %v, want ErrElementBudget", err)
 	}
@@ -697,7 +697,7 @@ func TestMapNullYieldsNilLikeUnmarshal(t *testing.T) {
 	// exactly as Unmarshal leaves a target it could not decode into.
 	prior := map[string]string{"pre": "x"}
 	d := jsoncap.NewDecoder(strings.NewReader(`[]`), 0)
-	m, err := jsoncap.Map(d, prior, 0, "meta", func(_ string, v *string) error { return d.Decode(v) })
+	m, err := d.Map(prior, 0, "meta", func(_ string, v *string) error { return d.Decode(v) })
 	if err == nil {
 		t.Fatal("Map over an array = nil error, want a shape error")
 	}
