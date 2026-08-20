@@ -20,7 +20,7 @@ The building blocks reproduce `encoding/json`'s observable semantics exactly, so
 ## Install
 
 ```sh
-go get github.com/cplieger/jsoncap@latest
+go get github.com/cplieger/jsoncap/v2@latest
 ```
 
 ## Usage
@@ -43,7 +43,7 @@ if err := dec.End(); err != nil {
 
 ```go
 dec := jsoncap.NewDecoder(bytes.NewReader(data), 0)
-records, err := jsoncap.Array(dec, nil, maxEnvelopeErrors, "errors",
+records, err := dec.Array(nil, maxEnvelopeErrors, "errors",
 	func(e *gqlError) error { return dec.Decode(e) })
 ```
 
@@ -87,8 +87,8 @@ if err := jsoncap.Preflight(bytes.NewReader(body)); err != nil {
 ## API
 
 - `NewDecoder(r io.Reader, elementBudget int) *Decoder`: a token walker over one JSON value. `elementBudget` bounds the total elements and map entries decoded across every container. A non-positive budget disables the aggregate bound; the per-container caps still apply.
-- `Array[T](d, prior, maxElems, what, decodeElem) ([]T, error)`: decodes one array, checking the per-array cap and the aggregate budget before each element costs anything. Reproduces `Unmarshal`'s null handling (nil slice), empty-array handling (empty non-nil slice), and duplicate-key lifecycle.
-- `Map[V](d, prior, maxEntries, what, decodeValue) (map[string]V, error)`: the same for a JSON object decoded into a Go map, charged against the same budget. Map semantics follow `Unmarshal`'s, where a duplicate key replaces with a fresh zero value rather than merging field-wise.
+- `(*Decoder).Array[T](prior, maxElems, what, decodeElem) ([]T, error)`: decodes one array, checking the per-array cap and the aggregate budget before each element costs anything. Reproduces `Unmarshal`'s null handling (nil slice), empty-array handling (empty non-nil slice), and duplicate-key lifecycle.
+- `(*Decoder).Map[V](prior, maxEntries, what, decodeValue) (map[string]V, error)`: the same for a JSON object decoded into a Go map, charged against the same budget. Map semantics follow `Unmarshal`'s, where a duplicate key replaces with a fresh zero value rather than merging field-wise.
 - `Decoder.Object(field func(key string) error) error`: walks an object, dispatching each key to the caller. Match keys with `strings.EqualFold` to reproduce `Unmarshal`'s case-insensitive field fallback.
 - `Decoder.Decode(v any) error`: decodes one scalar or value through `json.Decoder.Decode`, for stdlib-identical type handling.
 - `Decoder.Skip() error`: token-skips an unknown field without materializing it.

@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cplieger/jsoncap"
+	"github.com/cplieger/jsoncap/v2"
 )
 
 // FuzzParityWithUnmarshal drives arbitrary bytes through the bounded widget

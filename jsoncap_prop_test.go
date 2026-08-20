@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cplieger/jsoncap"
+	"github.com/cplieger/jsoncap/v2"
 	"pgregory.net/rapid"
 )
 
