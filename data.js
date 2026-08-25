@@ -1,6 +1,6 @@
 window.BENCHMARK_DATA = {
   "lastUpdate": 1787697478227,
-  "repoUrl": "https://github.com/cplieger/ci",
+  "repoUrl": "https://github.com/cplieger/jsoncap",
   "entries": {
     "Benchmark": [
       {
@@ -15,10 +15,10 @@ window.BENCHMARK_DATA = {
             "username": "web-flow",
             "email": "noreply@github.com"
           },
-          "id": "22ecb93b0586a9d799b745b0b5f7c2a5da2fe072",
-          "message": "chore(deps): update cplieger/ci digest to f04eff4 (#512)",
-          "timestamp": "2026-08-25T08:02:03Z",
-          "url": "https://github.com/cplieger/ci/commit/22ecb93b0586a9d799b745b0b5f7c2a5da2fe072"
+          "id": "daf1116c351ed79962b704957514d2fd34f78928",
+          "message": "chore(sync): synced file(s) with cplieger/ci (#20)\n\nCo-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>",
+          "timestamp": "2026-08-25T08:09:48Z",
+          "url": "https://github.com/cplieger/jsoncap/commit/daf1116c351ed79962b704957514d2fd34f78928"
         },
         "date": 1787697477940,
         "tool": "customSmallerIsBetter",
