@@ -15,15 +15,15 @@ import (
 var (
 	// ErrElementBudget reports that the Decoder's aggregate element budget
 	// was exhausted: the total number of array elements and map entries
-	// decoded (across every Array and Map call on this Decoder) exceeded the
+	// decoded across every Array and Map call on this Decoder exceeded the
 	// budget given to NewDecoder.
 	ErrElementBudget = errors.New("jsoncap: element budget exceeded")
 	// ErrArrayCap reports that one array exceeded its per-Array cardinality
 	// cap. The wrapping error names the array via Array's what argument.
 	ErrArrayCap = errors.New("jsoncap: array cardinality cap exceeded")
 	// ErrMapCap reports that one map exceeded its per-Map cardinality cap.
-	// The wrapping error names the map via Map's what argument, and never a
-	// key: at this boundary the keys are attacker-shaped text.
+	// The wrapping error names the map via Map's what argument, never a key:
+	// at this boundary the keys are attacker-shaped text.
 	ErrMapCap = errors.New("jsoncap: map cardinality cap exceeded")
 	// ErrDuplicateKey reports that Preflight found an object repeating a key
 	// (matched case-insensitively). The wrapping error carries a bounded,
@@ -32,43 +32,15 @@ var (
 )
 
 // MaxDepth is the nesting ceiling every walk in this package observes: at most
-// MaxDepth containers open at once. encoding/json enforces it, not this
-// package - the constant exists because the stdlib does not export the value,
-// so without it a caller has no name for the threshold and no way to write the
-// boundary body a test needs.
-//
-// Since Go 1.27 encoding/json is backed by encoding/json/v2, whose jsontext
-// Decoder refuses to read the token that would open container MaxDepth+1. That
-// refusal reaches every entry point here, because every one of them reads
-// tokens: Preflight, Skip, Object, Array, Map, Decode and a hand-rolled
-// Open/More/Close loop are all bounded by it. It arrives as encoding/json's own
-// *json.SyntaxError; this package does not translate it, because there is
-// nothing stable to translate it to (jsontext keeps its depth error unexported
-// and its exported SyntacticError documents its contents as subject to change,
-// so the only hook is the message text - and classifying an error by its text
-// is exactly what a sentinel exists to avoid).
-//
-// Measured on Go 1.27.0, for both nested arrays and nested objects: Preflight
-// and json.Unmarshal accept MaxDepth and reject MaxDepth+1 with the identical
-// *json.SyntaxError. So Preflight's depth acceptance set is EXACTLY
-// json.Unmarshal's, which is the parity Preflight promises, and it can never
-// admit a body the decode step would reject on depth. That parity is pinned by
-// TestPreflightDepthMatchesUnmarshal, which asserts both boundary levels
-// against json.Unmarshal itself rather than against this constant - so if a
-// future toolchain moves the stdlib's ceiling, the test fails instead of the
-// constant silently drifting.
-//
-// Historical note, because it explains a mechanism that is no longer here: on
-// Go 1.26 and earlier json.Decoder.Token applied NO depth limit, so a token
-// walk over a 1 MiB body of '[' recursed once per byte (~1M frames, measured at
-// 206 MB RSS inside a 256 MiB container). Preflight carried its own explicit
-// depth check to compensate, returning a local sentinel. Go 1.27 provides that
-// bound itself, at this exact threshold, so the check was deleted rather than
-// re-tuned: keeping it meant either duplicating a stdlib guarantee or - by
-// lowering the ceiling so the local check could still fire first - rejecting
-// depth-MaxDepth bodies that json.Unmarshal accepts, which would have traded a
-// true parity claim for a preserved error name. Measured with the check gone: a
-// 1 MiB all-opens body is still refused, and stack use stays flat at 2688 KiB.
+// MaxDepth containers open at once. encoding/json enforces this since Go 1.27
+// (its jsontext Decoder refuses to read the token that would open container
+// MaxDepth+1) and surfaces it as *json.SyntaxError; this package does not
+// translate it, because jsontext's own depth error is unexported and its
+// documented contents are subject to change. The constant exists only because
+// the stdlib does not export the threshold. Do not lower it to compensate for
+// a local check: TestPreflightDepthMatchesUnmarshal pins that Preflight's
+// depth acceptance set is exactly json.Unmarshal's, and a lower MaxDepth would
+// make Preflight reject a body Unmarshal accepts.
 const MaxDepth = 10000
 
 // maxKeySnippet bounds the untrusted key text a duplicate-key error renders,
@@ -224,23 +196,20 @@ func (d *Decoder) End() error {
 	return nil
 }
 
-// Array decodes one JSON array under the shared bounded lifecycle:
-// per-array cap check BEFORE the element is counted (an over-cap array
-// errors with ErrArrayCap, named by what), aggregate budget charge BEFORE
-// the element is allocated (ErrElementBudget), decode INTO the regrown
-// element, and truncation at the decoded length.
+// Array decodes one JSON array under the shared bounded lifecycle: per-array
+// cap check BEFORE the element is counted (ErrArrayCap, named by what),
+// aggregate budget charge BEFORE the element is allocated (ErrElementBudget),
+// decode INTO the regrown element, then truncation at the decoded length.
 //
 // prior is the already-decoded value of a previous occurrence of the same
-// key, giving json.Unmarshal's duplicate-key slice semantics: elements
-// decode into the existing slice (a within-capacity regrow re-exposes the
-// retained backing element, so field-wise merge matches stdlib), the result
-// truncates to the new array's length, and an empty re-occurrence REPLACES
-// the slice (a fresh empty non-nil slice, no retained backing a later
-// occurrence could re-expose). A JSON null in place of the array yields nil
-// without error, matching Unmarshal's null-into-slice; an empty array `[]`
-// yields an empty non-nil slice, matching Unmarshal's empty-array
-// allocation. Pass maxElems <= 0 for no per-array cap (the aggregate budget
-// still applies).
+// key, giving json.Unmarshal's duplicate-key slice semantics: a
+// within-capacity regrow re-exposes the retained backing element (so
+// field-wise merge matches stdlib), the result truncates to the new array's
+// length, and an empty re-occurrence replaces the slice with a fresh one so no
+// later occurrence can re-expose its backing. A JSON null yields nil without
+// error (Unmarshal's null-into-slice); `[]` yields an empty non-nil slice.
+// Pass maxElems <= 0 for no per-array cap (the aggregate budget still
+// applies).
 func (d *Decoder) Array[T any](prior []T, maxElems int, what string, decodeElem func(*T) error) ([]T, error) {
 	ok, err := d.Open('[')
 	if err != nil || !ok {
@@ -293,51 +262,36 @@ func truncateArray[T any](s []T, n int) []T {
 }
 
 // Map decodes one JSON object into a Go map under the same bounded lifecycle
-// Array gives a slice: per-map cap check BEFORE the entry costs anything (an
-// over-cap map errors with ErrMapCap, named by what), aggregate budget charge
-// BEFORE the entry is read (ErrElementBudget), then key, value, store.
-// decodeValue is invoked once per entry with that entry's key and a pointer to
-// the zero value it must decode into (Decode a scalar, or recurse into Object,
-// Array or Map for a container); the key is passed so a caller with a per-key
-// policy can apply it without a second walk. Pass maxEntries <= 0 for no
-// per-map cap (the aggregate budget still applies).
+// Array gives a slice: per-map cap check BEFORE the entry costs anything
+// (ErrMapCap, named by what), aggregate budget charge BEFORE the entry is
+// read (ErrElementBudget), then key, value, store. decodeValue is invoked
+// once per entry with that entry's key and a pointer to the zero value it
+// must decode into; the key is passed so a caller with a per-key policy can
+// apply it without a second walk. Pass maxEntries <= 0 for no per-map cap
+// (the aggregate budget still applies). The charge lands before the key is
+// read because the key is itself an unbounded allocation from the wire.
 //
-// It is a twin of Array rather than an exported entry-charge primitive, and
-// the choice follows the package's shape: every cap and charge here is applied
-// BY the walk, in an order a caller cannot get wrong (cap before charge,
-// charge before the entry is read), and the walk also owns the Unmarshal
-// semantics that go with the container. An exported counter would hand both
-// back to every caller - the order to re-derive per walk, the map's
-// null/duplicate/allocation semantics to re-derive per schema - which is the
-// drift this package was extracted to end. The charge lands before the KEY is
-// read because the key is itself an unbounded allocation from the wire, so a
-// budget that only bounded values would not bound the decode. A caller whose
-// map policy genuinely does not fit this shape keeps the token primitives
-// (Open, Key, Decode, Skip, More, Close) and its own accounting, exactly as it
-// can for arrays - it simply does not participate in this Decoder's aggregate.
+// Map is a twin of Array rather than an exported entry-charge primitive so
+// every caller gets the check order and the Unmarshal semantics applied
+// consistently by the walk. A caller whose map policy does not fit this
+// shape keeps the token primitives (Open, Key, Decode, Skip, More, Close)
+// and its own accounting instead.
 //
-// The map semantics reproduce json.Unmarshal's, which for maps differ from
-// both of the other walks in ways worth stating:
+// The map semantics reproduce json.Unmarshal's, which differ from Object and
+// Array in three ways:
 //
-//   - A JSON null in place of the object yields nil, wiping an already-decoded
-//     earlier occurrence of the same key. That is Unmarshal's null-into-MAP
-//     handling, which follows its null-into-slice (Array) and NOT its
-//     null-into-struct (Object, where a null is a no-op) - so a caller reading
-//     a nil map as a structural sentinel gets that sentinel from a hostile
-//     `"m":null` too, which is the fail-closed direction anyway.
-//   - Each entry decodes into a FRESH zero value, so a duplicate KEY replaces
-//     rather than merging field-wise (`{"a":{"x":1},"a":{"y":2}}` leaves only
-//     y set, where Array's prior would have merged), and a null value stores
-//     the zero value.
-//   - An empty object `{}` allocates an empty non-nil map when prior is nil,
-//     matching Unmarshal's allocation, but does NOT replace a non-nil prior
-//     (Array's empty re-occurrence does replace its slice) - Unmarshal only
-//     allocates a nil map, and an empty object then adds nothing.
-//   - A non-nil prior is decoded INTO, so a duplicate object key merges the
-//     two occurrences' entries and keys absent from the second survive.
-//   - Keys compare by the map's own exact equality: Unmarshal matches struct
-//     FIELDS case-insensitively but map keys case-sensitively, so "a" and "A"
-//     are two entries here.
+//   - A JSON null yields nil, wiping an already-decoded earlier occurrence
+//     of the same key (Unmarshal's null-into-slice handling, not its
+//     null-into-struct no-op).
+//   - Each entry decodes into a fresh zero value, so a duplicate key
+//     REPLACES rather than merges field-wise, and a null value stores the
+//     zero value.
+//   - An empty object `{}` allocates an empty non-nil map when prior is
+//     nil, but does not replace a non-nil prior (unlike Array's empty
+//     re-occurrence).
+//
+// Keys compare by the map's own exact equality, so "a" and "A" are two
+// entries here even though Unmarshal matches struct fields case-insensitively.
 //
 // On error the returned map holds the entries decoded so far, exactly as a
 // failed json.Unmarshal leaves them in the caller's map; the error, not the
@@ -384,32 +338,24 @@ func (d *Decoder) Map[V any](prior map[string]V, maxEntries int, what string, de
 // value.
 //
 // Duplicate object keys: encoding/json accepts a repeated key and applies the
-// LAST occurrence to the struct field, discarding the earlier value unseen. A
-// body carrying a real value and then a null for the same key therefore
-// decodes as the null, and no schema decoder downstream can tell that
-// happened - the evidence is gone before it is reachable. Matching is
-// case-insensitive because encoding/json matches struct FIELDS
-// case-insensitively too, so "media" and "Media" address the same field and
-// are equally ambiguous. The first repeat fails with ErrDuplicateKey. Note
-// this is the opposite fail direction from Object and Array, which reproduce
-// Unmarshal's duplicate-key MERGE semantics: a schema decoder must behave
-// exactly like the stdlib, while a caller that cannot tolerate the ambiguity
-// at all rejects the body before decoding it.
+// last occurrence to the struct field, discarding the earlier value unseen.
+// Matching is case-insensitive because encoding/json matches struct fields
+// case-insensitively too, so "media" and "Media" address the same field. The
+// first repeat fails with ErrDuplicateKey. This is the opposite fail
+// direction from Object and Array, which reproduce Unmarshal's duplicate-key
+// merge semantics: a schema decoder must behave like the stdlib, while a
+// caller that cannot tolerate the ambiguity rejects the body before decoding.
 //
-// Nesting depth is bounded but not by this pass: encoding/json refuses the
-// token that would open container MaxDepth+1, so an over-deep body fails with
-// its *json.SyntaxError and Preflight's depth acceptance set is exactly
-// json.Unmarshal's. See MaxDepth.
+// Nesting depth is bounded but not by this pass: see MaxDepth.
 //
 // It is a PREFLIGHT, not a decode: run it over the whole body, then hand the
-// same bytes to json.Unmarshal or a Decoder schema walk. It reads r to
-// completion and rejects trailing data after the top-level value (End's
-// whole-input strictness), so it never accepts a body the decode step would
-// reject. Content policy stays the caller's: Preflight takes no view of which
-// keys or values are acceptable, only of whether the structure is unambiguous.
-// Invalid UTF-8 is likewise not its concern - json.Unmarshal replaces
-// malformed bytes inside strings with U+FFFD rather than failing, and whether
-// that is acceptable depends on what the caller does with the decoded text.
+// same bytes to json.Unmarshal or a Decoder schema walk. It rejects trailing
+// data after the top-level value (End's whole-input strictness), so it never
+// accepts a body the decode step would reject. Content policy stays the
+// caller's: Preflight takes no view of which keys or values are acceptable,
+// only of whether the structure is unambiguous. Invalid UTF-8 is likewise not
+// its concern - json.Unmarshal replaces malformed bytes inside strings with
+// U+FFFD rather than failing.
 func Preflight(r io.Reader) error {
 	d := NewDecoder(r, 0)
 	if err := d.preflightValue(); err != nil {

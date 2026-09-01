@@ -12,13 +12,9 @@ import (
 // TestPropPreflightCollisionMatchesEqualFold is the every-PR property behind
 // Preflight's duplicate-key rule (the weekly fuzz corpus does not persist, so
 // rapid is the durable net). The fold canonicalization inside Preflight is an
-// optimization - it makes the per-object duplicate test O(keys) instead of the
-// O(keys^2) an EqualFold scan over accumulated keys would cost - so its whole
-// contract is that it decides collisions exactly as strings.EqualFold does.
-// The property drives that through the public surface: two sibling keys in one
-// object collide if and only if EqualFold says they are the same key, which is
-// the same question encoding/json answers when it maps both spellings onto one
-// struct field.
+// optimization - it makes the per-object duplicate test O(keys) instead of
+// the O(keys^2) an EqualFold scan would cost - so its whole contract is that
+// it decides collisions exactly as strings.EqualFold does.
 func TestPropPreflightCollisionMatchesEqualFold(t *testing.T) {
 	t.Parallel()
 	// Runes chosen to exercise the simple-fold orbits that make this

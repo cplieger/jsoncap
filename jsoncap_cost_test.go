@@ -9,41 +9,25 @@ import (
 	"github.com/cplieger/jsoncap/v2"
 )
 
-// This file pins the COST claim the rest of the suite leaves to prose: the
-// walk's allocation is bounded by the caller's caps, not by the cardinality on
-// the wire. Every other test here asserts semantics - parity, caps, budget,
-// structure - and a bounded decoder that produced the right answers while
-// allocating proportionally to hostile input would satisfy all of them and
-// still be useless.
+// This file pins the cost claim the rest of the suite leaves to prose: the
+// walk's allocation is bounded by the caller's caps, not by the cardinality
+// on the wire.
 //
-// Two things decide the SHAPE of the assertions, both measured on go1.27.0.
+// Allocation COUNT is the metric, not bytes: json.Unmarshal can allocate
+// fewer, larger chunks than the bounded walk while still amplifying far more
+// bytes, so a byte comparison belongs in the benchmarks below, not here.
 //
-// Allocation COUNT is the right metric for the bound and the wrong one for the
-// amplification. Measured on the hostile body below at 100000 elements:
-// json.Unmarshal takes only 39 allocations against the bounded walk's 22,
-// because it allocates ONE slice backing array - few allocations, 12974836
-// bytes. So a count ratio says nothing, while the count's INDEPENDENCE from
-// cardinality says everything. The byte gap is left to the benchmarks, where
-// b.ReportAllocs prints B/op and no threshold has to be invented.
+// An exact count cannot be asserted: since Go 1.27 encoding/json is backed
+// by a pooled coder, so under -race a single testing.AllocsPerRun sample is
+// nondeterministic. minAllocsPerRun below takes the minimum over several
+// trials as the steady-state cost, and the assertions use a ratio ceiling
+// rather than an equality so a real regression is still caught.
 //
-// An exact count cannot be asserted at all. Since Go 1.27 encoding/json is
-// backed by encoding/json/v2, whose coder is POOLED, so under -race - which is
-// how this suite runs in CI - a single testing.AllocsPerRun sample on any JSON
-// path is nondeterministic: measured 21 to 25 across six trials at one input
-// size, and a hard 21.0 with -race off. Hence minAllocsPerRun below and a
-// ceiling rather than an equality. The floor is also what makes the numbers
-// robust to a parallel sibling test allocating inside the measurement window:
-// pollution can only ever raise a sample, never lower it.
-//
-// These tests do not call t.Parallel: AllocsPerRun pins GOMAXPROCS to 1 for its
-// window, so running them concurrently would only add noise they then have to
-// discount.
+// These tests do not call t.Parallel: AllocsPerRun pins GOMAXPROCS to 1 for
+// its window, so a concurrent sibling would only add noise.
 
-// hostileArray renders the amplification shape the package exists to bound: n
-// compact serialized elements, cheap on the wire and expensive to decode. At
-// n=100000 it is 300011 bytes of JSON that json.Unmarshal expands into
-// 12974836 bytes of decoded structs and slice backing array - 43x its own wire
-// size, which is why a byte cap on the body is not a bound on the decode.
+// hostileArray renders the amplification shape the package exists to bound:
+// n compact serialized elements, cheap on the wire and expensive to decode.
 func hostileArray(n int) []byte {
 	var b strings.Builder
 	b.Grow(3*n + 16)
@@ -58,9 +42,9 @@ func hostileArray(n int) []byte {
 	return []byte(b.String())
 }
 
-// minAllocsPerRun is testing.AllocsPerRun's steady-state cost: the minimum over
-// several trials, which discards the pooled coder's cold-start samples and any
-// allocation a concurrently running test contributed to the window.
+// minAllocsPerRun is testing.AllocsPerRun's steady-state cost: the minimum
+// over several trials, discarding the pooled coder's cold-start samples and
+// any allocation a concurrently running test contributed to the window.
 func minAllocsPerRun(runs, trials int, f func()) float64 {
 	best := testing.AllocsPerRun(runs, f)
 	for range trials - 1 {
@@ -74,18 +58,10 @@ func minAllocsPerRun(runs, trials int, f func()) float64 {
 // TestBoundedAllocationDoesNotScaleWithCardinality is the package's reason to
 // exist, as an assertion: a caller whose per-array cap is 16 pays for 16
 // elements whatever the body claims. The two bodies differ 1000-fold in
-// cardinality and in wire size, and the walk must reject both at the same cost.
-//
-// Measured growth is 1.00x - 21.0 allocations for both bodies, identical with
-// -race on and off - against a 1.5x ceiling, which leaves room for the pooled
-// coder's -race wobble (a single sample ranges 21 to 25) without admitting a
-// real regression. Red-checked against the materialize-then-check shape, where
-// the walk decodes the whole array before applying the cap: that reports 34 and
-// 69 for a growth of 2.03x and fails. Note the ceiling is a RATIO rather than a
-// multiple of some absolute constant because the mutant inflates the baseline
-// too, and note that growth there is logarithmic rather than linear - the
-// regrow goes through append, so a million elements costs ~20 reallocations,
-// not a million. That is why the ceiling is 1.5x and not 10x.
+// cardinality and wire size, and the walk must reject both at the same cost.
+// The ceiling is a ratio rather than an absolute count because a mutant that
+// breaks the bound inflates the baseline too; growth is logarithmic rather
+// than linear because the regrow goes through append.
 func TestBoundedAllocationDoesNotScaleWithCardinality(t *testing.T) {
 	const cap = 16
 	small, large := hostileArray(1000), hostileArray(1_000_000)
@@ -108,13 +84,11 @@ func TestBoundedAllocationDoesNotScaleWithCardinality(t *testing.T) {
 }
 
 // TestPreflightAllocationBoundedByDepthCeiling pins the cost half of the
-// nesting bound. Since Go 1.27 the depth guard is encoding/json's, and MaxDepth
-// documents the consequence as measured: a 1 MiB all-opens body is refused
-// without recursing once per byte. TestPreflightBoundsAllOpensBody asserts only
-// that it IS refused, which a walk that first recursed 1048576 frames would
-// also satisfy. This asserts the cost: 64x more input for the same work,
-// because the ceiling stops the walk at MaxDepth frames rather than at the end
-// of the input. Measured 56 allocations at both sizes, growth 1.00x.
+// nesting bound: the depth guard stops the walk at MaxDepth frames rather
+// than at the end of the input, so a much larger all-opens body costs the
+// same as a small one. TestPreflightBoundsAllOpensBody asserts only that the
+// body IS refused, which a walk that recursed once per byte before failing
+// would also satisfy.
 func TestPreflightAllocationBoundedByDepthCeiling(t *testing.T) {
 	small := bytes.Repeat([]byte("["), 1<<16)
 	large := bytes.Repeat([]byte("["), 1<<22)
@@ -139,15 +113,11 @@ func errorIsArrayCap(err error) bool {
 }
 
 // BenchmarkHostileArray is the amplification claim as a trend rather than a
-// threshold: run it and read B/op. Measured on go1.27.0 at 100000 elements from
-// a 300011-byte body, json.Unmarshal allocates 12974836 B/op in 6703647 ns
-// where the bounded walk allocates 1823 B/op in 6944 ns and refuses the body -
-// 7117x fewer bytes and 965x faster, a gap no assertion has to name a number
-// for.
+// threshold: run it and read B/op.
 //
-// Neither arm calls b.SetBytes, deliberately: the bounded arm stops at element
-// 16 and never reads the remaining 300 KB, so a MB/s figure would divide work
-// that did not happen by time that did and report ~43 GB/s.
+// Neither arm calls b.SetBytes, deliberately: the bounded arm stops at
+// element 16 and never reads the rest of the body, so a MB/s figure would
+// divide work that did not happen by time that did.
 func BenchmarkHostileArray(b *testing.B) {
 	body := hostileArray(100_000)
 
@@ -194,8 +164,8 @@ func BenchmarkPreflight(b *testing.B) {
 		}
 	})
 
-	// No SetBytes on this arm: the depth ceiling stops the walk after MaxDepth
-	// of the 1048576 brackets, so throughput over the whole body is fiction.
+	// No SetBytes on this arm: the depth ceiling stops the walk after
+	// MaxDepth of the brackets, so throughput over the whole body is fiction.
 	b.Run("all-opens", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
@@ -206,10 +176,8 @@ func BenchmarkPreflight(b *testing.B) {
 
 // BenchmarkSkip is the unknown-field path. Skip builds no Go value, which is
 // the claim its doc makes, but it is NOT allocation-free: json.Decoder.Token
-// returns each token as an any, so the cost is proportional to the token count
-// of the skipped value. Measured 5.02 allocations per skipped two-field object
-// element (5023 for a 17027-byte array of 1000 of them), which is the number to
-// compare against if this path is ever reworked.
+// returns each token as an any, so the cost is proportional to the token
+// count of the skipped value.
 func BenchmarkSkip(b *testing.B) {
 	var body strings.Builder
 	body.WriteString(`{"unknown":[`)
