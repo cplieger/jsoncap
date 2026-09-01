@@ -400,21 +400,16 @@ func TestPreflightKeyFoldMatchesEqualFold(t *testing.T) {
 }
 
 // TestPreflightDepthMatchesUnmarshal pins the depth contract Preflight
-// promises: its acceptance set is exactly json.Unmarshal's, so the preflight
-// can never admit a body the decode step would reject on depth, nor reject one
-// it would accept.
-//
-// The ceiling is encoding/json's, not this package's. Since Go 1.27 the v1 API
-// is backed by encoding/json/v2, whose jsontext Decoder refuses to read the
-// token that would open container MaxDepth+1, and that refusal reaches every
-// token-reading entry point here. Both boundary levels are asserted, and
-// asserted against json.Unmarshal rather than against MaxDepth, so a future
-// toolchain that moves the stdlib ceiling fails this test instead of leaving
-// the constant to drift silently.
+// promises: its acceptance set is exactly json.Unmarshal's, so it can never
+// admit a body the decode step would reject on depth, nor reject one it
+// would accept. The ceiling is encoding/json's, not this package's (jsontext
+// refuses to read the token that would open container MaxDepth+1), so both
+// boundary levels are asserted against json.Unmarshal rather than against
+// MaxDepth: a future toolchain that moves the stdlib ceiling fails this test
+// instead of leaving the constant to drift silently.
 //
 // The error TEXT is deliberately not pinned: jsontext keeps its depth error
-// unexported and documents SyntacticError's contents as subject to change, so
-// the type is the strongest stable assertion available.
+// unexported, so the type is the strongest stable assertion available.
 func TestPreflightDepthMatchesUnmarshal(t *testing.T) {
 	t.Parallel()
 	shapes := map[string]struct {
@@ -457,12 +452,11 @@ func TestPreflightDepthMatchesUnmarshal(t *testing.T) {
 	}
 }
 
-// TestPreflightBoundsAllOpensBody pins the hostile shape the package was built
-// for: 1 MiB of nothing but '['. It must be refused by the nesting ceiling after
-// MaxDepth frames rather than by recursing once per byte to discover the body is
-// truncated, so the cost is bounded by the ceiling and not by the input length.
-// Before Go 1.27 this needed an explicit depth check in preflightValue; the
-// stdlib now provides the bound, and this test is what holds it.
+// TestPreflightBoundsAllOpensBody pins the hostile shape the package was
+// built for: 1 MiB of nothing but '['. It must be refused by the nesting
+// ceiling after MaxDepth frames rather than by recursing once per byte to
+// discover the body is truncated, so the cost is bounded by the ceiling and
+// not by the input length.
 func TestPreflightBoundsAllOpensBody(t *testing.T) {
 	t.Parallel()
 	if err := jsoncap.Preflight(strings.NewReader(strings.Repeat("[", 1<<20))); err == nil {
