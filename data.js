@@ -1,6 +1,6 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788307204009,
-  "repoUrl": "https://github.com/cplieger/jsoncap",
+  "lastUpdate": 1788912204631,
+  "repoUrl": "https://github.com/cplieger/ci",
   "entries": {
     "Benchmark": [
       {
@@ -252,6 +252,133 @@ window.BENCHMARK_DATA = {
             "name": "BenchmarkSkip",
             "value": 191781,
             "range": "± 854",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "Christopher Plieger",
+            "username": "cplieger",
+            "email": "917744+cplieger@users.noreply.github.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "c7c2a56c10b85a4e0b5b155f46d75b4906546b04",
+          "message": "chore(deps): update cplieger/ci digest to a2bb34b (#580)",
+          "timestamp": "2026-09-09T00:02:08Z",
+          "url": "https://github.com/cplieger/ci/commit/c7c2a56c10b85a4e0b5b155f46d75b4906546b04"
+        },
+        "date": 1788912203833,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "BenchmarkHostileArray/bounded-cap16 - B/op",
+            "value": 1672,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkHostileArray/bounded-cap16 - allocs/op",
+            "value": 22,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkHostileArray/bounded-cap16",
+            "value": 2039.5,
+            "range": "± 24",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkHostileArray/unmarshal - B/op",
+            "value": 12970579.5,
+            "range": "± 35",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkHostileArray/unmarshal - allocs/op",
+            "value": 31,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkHostileArray/unmarshal",
+            "value": 7281495,
+            "range": "± 131586.5",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkPreflight/all-opens - B/op",
+            "value": 471658,
+            "range": "± 0.5",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkPreflight/all-opens - allocs/op",
+            "value": 55,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkPreflight/all-opens",
+            "value": 450146.5,
+            "range": "± 7865",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkPreflight/wide-object - B/op",
+            "value": 4225,
+            "range": "± 0",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkPreflight/wide-object - allocs/op",
+            "value": 126,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkPreflight/wide-object",
+            "value": 8961,
+            "range": "± 100",
+            "unit": "ns/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSkip - B/op",
+            "value": 75061.5,
+            "range": "± 7.5",
+            "unit": "B/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSkip - allocs/op",
+            "value": 5023,
+            "range": "± 0",
+            "unit": "allocs/op",
+            "extra": "10 samples, median"
+          },
+          {
+            "name": "BenchmarkSkip",
+            "value": 192101.5,
+            "range": "± 3349.5",
             "unit": "ns/op",
             "extra": "10 samples, median"
           }
