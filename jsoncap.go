@@ -333,29 +333,13 @@ func (d *Decoder) Map[V any](prior map[string]V, maxEntries int, what string, de
 	return m, d.Close()
 }
 
-// Preflight walks one complete JSON value from r and rejects the structural
-// defect json.Unmarshal silently tolerates. It decodes nothing into a caller
-// value.
-//
-// Duplicate object keys: encoding/json accepts a repeated key and applies the
-// last occurrence to the struct field, discarding the earlier value unseen.
-// Matching is case-insensitive because encoding/json matches struct fields
-// case-insensitively too, so "media" and "Media" address the same field. The
-// first repeat fails with ErrDuplicateKey. This is the opposite fail
-// direction from Object and Array, which reproduce Unmarshal's duplicate-key
-// merge semantics: a schema decoder must behave like the stdlib, while a
-// caller that cannot tolerate the ambiguity rejects the body before decoding.
-//
-// Nesting depth is bounded but not by this pass: see MaxDepth.
-//
-// It is a PREFLIGHT, not a decode: run it over the whole body, then hand the
-// same bytes to json.Unmarshal or a Decoder schema walk. It rejects trailing
-// data after the top-level value (End's whole-input strictness), so it never
-// accepts a body the decode step would reject. Content policy stays the
-// caller's: Preflight takes no view of which keys or values are acceptable,
-// only of whether the structure is unambiguous. Invalid UTF-8 is likewise not
-// its concern - json.Unmarshal replaces malformed bytes inside strings with
-// U+FFFD rather than failing.
+// Preflight walks one complete JSON value from r, decoding nothing, and
+// rejects what json.Unmarshal silently tolerates: the first repeated object
+// key, matched case-insensitively as encoding/json matches fields, fails with
+// ErrDuplicateKey (Object and Array instead mirror Unmarshal's last-wins
+// merge). Trailing data after the value is rejected. It checks structure
+// only, so an accepted body can still fail the decode, and it judges neither
+// content nor UTF-8 validity. Depth is bounded by MaxDepth.
 func Preflight(r io.Reader) error {
 	d := NewDecoder(r, 0)
 	if err := d.preflightValue(); err != nil {
