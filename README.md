@@ -142,7 +142,7 @@ A schema decoder built from these calls returns what `json.Unmarshal` would retu
 
 ## Contributing
 
-Issues and pull requests are welcome. See [CONTRIBUTING.md](https://github.com/cplieger/.github/blob/main/CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Disclaimer
 
