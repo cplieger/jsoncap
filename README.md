@@ -1,5 +1,8 @@
 # jsoncap
 
+> Merged into [`github.com/cplieger/go/jsonx`](https://github.com/cplieger/go/tree/dev/jsonx), which carries its decoder and preflight.
+> **Archived 2026-11-07. This repository is read-only. The published Go module stays available.**
+
 [![Go Reference](https://pkg.go.dev/badge/github.com/cplieger/jsoncap/v2.svg)](https://pkg.go.dev/github.com/cplieger/jsoncap/v2) [![Go version](https://img.shields.io/github/go-mod/go-version/cplieger/jsoncap)](https://github.com/cplieger/jsoncap/blob/main/go.mod) [![Mutation](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/cplieger/jsoncap/badges/mutation.json)](https://github.com/cplieger/jsoncap/issues?q=label%3Agremlins-tracker)
 
 jsoncap decodes untrusted JSON in Go and refuses the element that would cross your cap before it is allocated, while matching `json.Unmarshal` on well-formed input.
